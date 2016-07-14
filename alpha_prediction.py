@@ -23,7 +23,7 @@ GBR_PARAMETER_GRID_ = {'learning_rate': [0.1, 0.01],
                        'min_samples_leaf': [2, 20],
                        'max_features': ['auto', 'sqrt', 'log2'],
                        'loss': ['ls', 'lad'],
-                       'n_estimators': [500]}
+                       'n_estimators': [100]}
 # redefine the GBC so we can do RFECV
 
 
@@ -167,12 +167,11 @@ def main(
             plt.show()
 
             if plot_rfecv_gridscore and rfecv_eval:
-                plt.figure()
                 plt.xlabel("Number of features selected")
                 plt.ylabel("Cross validation score (r2)")
                 plt.title(str('CV: ' + regName + '; dataset: ' + name[:-4]))
-                plt.plot(range(1, len(
-                    rfecv.grid_scores_) + 1), rfecv.grid_scores_)
+                plt.plot(range(1, len(rfecv.grid_scores_) + 1),
+                         rfecv.grid_scores_)
                 plt.show()
 
 
