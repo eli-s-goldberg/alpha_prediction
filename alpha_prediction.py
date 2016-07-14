@@ -3,12 +3,12 @@ import pandas as pd
 import errno
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn import metrics, grid_search
-from sklearn.metrics import classification_report
-from sklearn import cross_validation
-import sklearn.metrics
+from sklearn import metrics, grid_search, cross_validation
 from sklearn.feature_selection import RFECV
 from sklearn.ensemble import GradientBoostingRegressor
+
+from helper_functions import one_hot_dataframe, make_dirs
+
 DATABASE_PATH = os.path.join('alpha_database.csv')
 
 GBR_INITIAL_PARAMS_ = {'learning_rate': 0.1,
@@ -16,62 +16,25 @@ GBR_INITIAL_PARAMS_ = {'learning_rate': 0.1,
                        'min_samples_leaf': 5,
                        'max_features': 'sqrt',
                        'loss': 'ls',
-                       'n_estimators': 1000}
+                       'n_estimators': 50}
 
 GBR_PARAMETER_GRID_ = {'learning_rate': [0.1, 0.01],
                        'max_depth': [4, 5, 9, None],
                        'min_samples_leaf': [2, 20],
                        'max_features': ['auto', 'sqrt', 'log2'],
                        'loss': ['ls', 'lad'],
-                       'n_estimators': [100]}
+                       'n_estimators': [50]}
+
+ONE_HOT_REFORM_CATEGORIES_ = ['nmId', 'shape', 'nomLayer',
+                              'dissNomType', 'saltType', 'prepMethod']
+
+
 # redefine the GBC so we can do RFECV
-
-
 class GradientBoostingRegressorWithCoef(GradientBoostingRegressor):
 
     def fit(self, *args, **kwargs):
         super(GradientBoostingRegressorWithCoef, self).fit(*args, **kwargs)
         self.coef_ = self.feature_importances_
-
-
-def one_hot_dataframe(data, cols, replace=False):
-    """Do hot encoding of categorical columns in a pandas DataFrame.
-    See:
-    http://scikit-learn.org/dev/modules/generated/sklearn.preprocessing.OneHotEncoder.html#sklearn.preprocessing
-    .OneHotEncoder
-    http://scikit-learn.org/dev/modules/generated/sklearn.feature_extraction.DictVectorizer.html
-    https://gist.github.com/kljensen/5452382
-    Takes a dataframe and a list of columns that need to be encoded.
-        Returns a 3-tuple comprising the data, the vectorized data,
-        and the fitted vectorizor.
-    """
-    from sklearn.feature_extraction import DictVectorizer
-    vec = DictVectorizer()
-    mkdict = lambda row: dict((col, row[col]) for col in cols)
-    vec_data = pd.DataFrame(vec.fit_transform(
-        data[cols].apply(mkdict, axis=1)).toarray())
-    vec_data.columns = vec.get_feature_names()
-    vec_data.index = data.index
-    if replace is True:
-        data = data.drop(cols, axis=1)
-        data = data.join(vec_data)
-
-    return (data, vec_data, vec)
-
-
-def make_dirs(path):
-    """Recursively make directories, ignoring when they already exist.
-    See: http://stackoverflow.com/a/600612/1275412
-    """
-    try:
-        os.makedirs(path)
-    except OSError as exc:
-        if exc.errno != errno.EEXIST or not os.path.isdir(path):
-            raise
-
-
-ONE_HOT_REFORM_CATEGORIES_ = [
-    'nmId', 'shape', 'nomLayer', 'dissNomType', 'saltType', 'prepMethod']
 
 
 def main(
@@ -162,17 +125,17 @@ def main(
             print metrics.mean_absolute_error(rfecv_y_predicted, y_holdout)
             print metrics.r2_score(rfecv_y_predicted, y_holdout)
 
-            plt.plot(rfecv_y_predicted, y_holdout, '+')
-            plt.plot(y_holdout, y_holdout, 'r-')
-            plt.show()
-
             if plot_rfecv_gridscore and rfecv_eval:
+                plt.plot(rfecv_y_predicted, y_holdout, '+')
+                plt.plot(y_holdout, y_holdout, 'r-')
+                plt.show()
+
                 plt.xlabel("Number of features selected")
-                plt.ylabel("Cross validation score (r2)")
-                plt.title(str('CV: ' + regName + '; dataset: ' + name[:-4]))
+                plt.ylabel("Cross validation score (MAE)")
+                # plt.title(str('CV: ' + regName + '; dataset: ' + name[:-4]))
                 plt.plot(range(1, len(rfecv.grid_scores_) + 1),
                          rfecv.grid_scores_)
                 plt.show()
 
 
-main(grid_search_eval=True)
+main(grid_search_eval=True, plot_rfecv_gridscore=False)
