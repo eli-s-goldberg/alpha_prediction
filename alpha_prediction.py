@@ -1,8 +1,8 @@
 import os
 import pandas as pd
-import errno
 import matplotlib.pyplot as plt
 import numpy as np
+from itertools import compress
 from sklearn import metrics, grid_search, cross_validation
 from sklearn.feature_selection import RFECV
 from sklearn.ensemble import GradientBoostingRegressor
@@ -46,7 +46,8 @@ def main(
         grid_search_eval=True,
         shuffle_holdout=True,
         plot_rfecv_gridscore=True,
-        holdout_size=0.15,
+        plot_all_gridscores=True,
+        holdout_size=0.20,
         crossfolds=5,
         one_hot_reform_categories=ONE_HOT_REFORM_CATEGORIES_,
         database_path=DATABASE_PATH,
@@ -58,8 +59,21 @@ def main(
     database_basename = os.path.basename(DATABASE_PATH)
 
     # output directory
-    output_dir = os.path.join(output_dir, 'classifier')
+    output_dir = os.path.join(output_dir, 'regressor')
     make_dirs(output_dir)
+
+    # initialize predicted and holdout tracking
+    rfecv_y_predicted_track = []
+    rfecv_y_holdout_track = []
+
+    # initialize score tracking
+    score_track_mae = []
+    score_track_r2 = []
+    rfecv_gridscore_track = []
+
+    # initialize feature tracking and ranking
+    feature_track = []
+    feature_rank = []
 
     training_data = pd.read_csv(database_path)
     target_data = training_data[target_data_column_name]
@@ -120,22 +134,93 @@ def main(
                 cv=crossfolds,
                 scoring='mean_absolute_error')
 
+            # perform rfecv fitting
             rfecv.fit(x_train, y_train)
+
+            # track predicted y values
             rfecv_y_predicted = rfecv.predict(x_holdout)
-            print metrics.mean_absolute_error(rfecv_y_predicted, y_holdout)
-            print metrics.r2_score(rfecv_y_predicted, y_holdout)
+            rfecv_y_predicted_track.append(rfecv_y_predicted)
 
-            if plot_rfecv_gridscore and rfecv_eval:
-                plt.plot(rfecv_y_predicted, y_holdout, '+')
-                plt.plot(y_holdout, y_holdout, 'r-')
-                plt.show()
+            # track truth y_holdout values
+            rfecv_y_holdout_track.append(y_holdout)
 
-                plt.xlabel("Number of features selected")
-                plt.ylabel("Cross validation score (MAE)")
-                # plt.title(str('CV: ' + regName + '; dataset: ' + name[:-4]))
-                plt.plot(range(1, len(rfecv.grid_scores_) + 1),
-                         rfecv.grid_scores_)
-                plt.show()
+            # track grid score rankings
+            rfecv_gridscore_track.append(rfecv.grid_scores_)
+
+            # track MAE performance of estimtor to predict holdout
+            score_track_mae.append(metrics.mean_absolute_error(
+                rfecv_y_predicted, y_holdout))
+
+            # track overall r2 performance to predict holdout
+            score_track_r2.append(metrics.r2_score(
+                rfecv_y_predicted, y_holdout))
+
+            # create array of feature ranks (contains all featuers)
+            feature_rank.append(rfecv.ranking_)
+            feat_names = np.array(list(training_data), copy=True)
+
+            # create array of only selected features
+            rfecv_bool = np.array(rfecv.support_, copy=True)
+            sel_feat = list(compress(feat_names, rfecv_bool))
+            feature_track.append(sel_feat)
+
+        if plot_rfecv_gridscore and rfecv_eval:
+            plt.plot(rfecv_y_predicted, y_holdout, '+')
+            plt.plot(y_holdout, y_holdout, 'r-')
+            plt.show()
+
+            plt.xlabel("Number of features selected")
+            plt.ylabel("Cross validation score (MAE)")
+            plt.plot(range(1, len(rfecv.grid_scores_) + 1),
+                     rfecv.grid_scores_)
+            plt.show()
+
+    # Output used to plot the rank of each feature relatively. 
+    feature_rank_df = pd.DataFrame(feature_rank)
+    feature_rank_df.columns = feat_names 
+    feature_rank_df = feature_rank_df.transpose()
+    feature_rank_df.to_csv('feature_rank_df.csv')
+
+    # Output used to plot only the best features
+    feature_track = pd.DataFrame(feature_track)
+    feature_track = feature_track.transpose()
+    feature_track.to_csv('feature_track.csv')
+
+    # overall r2 value for all runs
+
+    overall_r2 = metrics.r2_score(
+        np.array(rfecv_y_predicted_track).ravel(order='C'), np.array(
+            rfecv_y_holdout_track).ravel(order='C'))
+    print overall_r2
+
+    # Output to plot the predicted y values 
+    rfecv_y_predicted_track = pd.DataFrame(rfecv_y_predicted_track).transpose()
+    rfecv_y_predicted_track.to_csv('rfecv_y_predicted_track.csv')
+
+    # Output to plot the holdout y values (truth)
+    rfecv_y_holdout_track = pd.DataFrame(rfecv_y_holdout_track).transpose()
+    rfecv_y_holdout_track.to_csv('rfecv_y_holdout_track.csv')
+
+    # rfecv_x_holdout_track = pd.DataFrame(rfecv_x_holdout_track)
+    # rfecv_x_holdout_track.to_csv('rfecv_x_holdout_track.csv')
+
+    # Output used to plot the optimum model MAE 
+    score_track_mae = pd.DataFrame(score_track_mae).transpose()
+    score_track_mae.to_csv('score_track_mae.csv')
+
+    # Output used to plot the optimum model r2 
+    score_track_r2 = pd.DataFrame(score_track_r2).transpose()
+    score_track_r2.to_csv('score_track_r2.csv')
+
+    # transpose dataframe for ease of viewing and plotting
+    rfecv_gridscore_track = pd.DataFrame(rfecv_gridscore_track)
+    rfecv_gridscore_track = rfecv_gridscore_track.transpose()
+    rfecv_gridscore_track.to_csv('rfecv_gridscore_track.csv')
+
+    if plot_all_gridscores:
+        rfecv_gridscore_track.plot(kind='box')
+        plt.show()
 
 
-main(grid_search_eval=True, plot_rfecv_gridscore=False)
+main(iterations=3, plot_rfecv_gridscore=False, plot_all_gridscores=True)
+
