@@ -46,3 +46,15 @@ def make_dirs(path):
     except OSError as exc:
         if exc.errno != errno.EEXIST or not os.path.isdir(path):
             raise
+
+
+
+def heldout_score(clf, X_test, y_test, n_estimators):
+    """compute deviance scores on ``X_test`` and ``y_test``.
+    See: http://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_oob.html"""
+    clf.fit(X_test, y_test)
+    score = np.zeros((n_estimators,), dtype=np.float64)
+    for i, y_pred in enumerate(clf.staged_predict(X_test)):
+        # clf.loss_ assumes that y_test[i] in {0, 1}
+        score[i] = clf.loss_(y_test, y_pred)
+    return score
