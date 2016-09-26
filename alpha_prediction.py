@@ -7,7 +7,7 @@ from sklearn import metrics, grid_search, cross_validation
 from sklearn.feature_selection import RFECV
 from sklearn.ensemble import GradientBoostingRegressor
 
-from helper_functions import one_hot_dataframe, make_dirs
+from helper_functions import *
 
 DATABASE_PATH = os.path.join('alpha_database.csv')
 
@@ -19,11 +19,12 @@ GBR_INITIAL_PARAMS_ = {'learning_rate': 0.1,
                        'n_estimators': 50}
 
 GBR_PARAMETER_GRID_ = {'learning_rate': [0.1, 0.01],
-                       'max_depth': [4, 5, 9, None],
-                       'min_samples_leaf': [2, 20],
-                       'max_features': ['auto', 'sqrt', 'log2'],
-                       'loss': ['ls', 'lad'],
-                       'n_estimators': [50]}
+                       'max_depth': [5],
+                       'min_samples_leaf': [2,15,30],
+                       'max_features': ['auto','sqrt', 'log2'],
+                       'loss': ['ls', 'lad','huber','quantile'],
+                       'n_estimators': [500]}
+
 
 ONE_HOT_REFORM_CATEGORIES_ = ['nmId', 'shape', 'nomLayer',
                               'dissNomType', 'saltType', 'prepMethod']
@@ -46,6 +47,8 @@ def main(
         grid_search_eval=True,
         shuffle_holdout=True,
         plot_rfecv_gridscore=True,
+        optimum_gbr_estimate = True,
+        max_gbr_iterations = 1000,
         plot_all_gridscores=True,
         holdout_size=0.20,
         crossfolds=5,
@@ -107,16 +110,26 @@ def main(
         '''The logic is to optimize the parameters for all the features before
 		RFECV'''
         if grid_search_eval:
-            grid_searcher = grid_search.GridSearchCV(estimator=clf,
-                                                     cv=crossfolds,
-                                                     param_grid=gbr_parameter_grid_,
-                                                     n_jobs=-1)
+            if optimum_gbr_estimate:
+                # determine minimum number of estimators with least overfitting
+                x = np.arange(max_gbr_iterations) + 1
+                test_score = heldout_score(clf, x_train, y_train,max_gbr_iterations)
+                test_score -= test_score[0]
+                test_best_iter = x[np.argmin(test_score)]
+                print test_best_iter, "optimum number of iterations"
+                gbr_parameter_grid_['n_estimators'] = [test_best_iter*3]
 
-            # call the grid search fit using the data
-            grid_searcher.fit(x_train, y_train)
+                # then implement grid search alg.
+                grid_searcher = grid_search.GridSearchCV(estimator=clf,
+                                                         cv=crossfolds,
+                                                         param_grid=gbr_parameter_grid_,
+                                                         n_jobs=-1)
 
-            # store and print the best parameters
-            best_params = grid_searcher.best_params_
+                # call the grid search fit using the data
+                grid_searcher.fit(x_train, y_train)
+
+                # store and print the best parameters
+                best_params = grid_searcher.best_params_
 
         else:
             ''' The logic is that if we don't do grid search, use initial
@@ -218,9 +231,10 @@ def main(
     rfecv_gridscore_track.to_csv('rfecv_gridscore_track.csv')
 
     if plot_all_gridscores:
-        rfecv_gridscore_track.plot(kind='box')
+        rfecv_gridscore_track.plot(kind='line')
         plt.show()
 
 
-main(iterations=3, plot_rfecv_gridscore=False, plot_all_gridscores=True)
+if __name__=="__main__":
+    main(iterations=1, plot_rfecv_gridscore=False, plot_all_gridscores=True)
 
