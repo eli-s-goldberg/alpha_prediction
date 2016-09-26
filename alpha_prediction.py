@@ -11,14 +11,15 @@ from helper_functions import *
 
 DATABASE_PATH = os.path.join('alpha_database.csv')
 
-GBR_INITIAL_PARAMS_ = {'learning_rate': 0.1,
-                       'max_depth': 4,
+GBR_INITIAL_PARAMS_ = {'learning_rate': .1,
+                       'max_depth': 3,
                        'min_samples_leaf': 5,
-                       'max_features': 'sqrt',
-                       'loss': 'ls',
-                       'n_estimators': 50}
+                       'max_features': 'auto',
+                       'loss': 'lad',
+                       'subsample':.5,
+                       'n_estimators': 5000}
 
-GBR_PARAMETER_GRID_ = {'learning_rate': [0.1, 0.01],
+GBR_PARAMETER_GRID_ = {'learning_rate': [0.3, 0.1],
                        'max_depth': [5],
                        'min_samples_leaf': [2,15,30],
                        'max_features': ['auto','sqrt', 'log2'],
@@ -48,9 +49,9 @@ def main(
         shuffle_holdout=True,
         plot_rfecv_gridscore=True,
         optimum_gbr_estimate = True,
-        max_gbr_iterations = 1000,
+        max_gbr_iterations = 5000,
         plot_all_gridscores=True,
-        holdout_size=0.20,
+        holdout_size=0.15,
         crossfolds=5,
         one_hot_reform_categories=ONE_HOT_REFORM_CATEGORIES_,
         database_path=DATABASE_PATH,
@@ -92,7 +93,7 @@ def main(
             training_data, one_hot_reform_categories, replace=True)
 
     for run in xrange(iterations):
-        print run
+        print "run: ", run+1
         y_all = np.array(target_data)
         x_all = training_data.as_matrix()
 
@@ -111,13 +112,18 @@ def main(
 		RFECV'''
         if grid_search_eval:
             if optimum_gbr_estimate:
+                # initial params for optimum finding
+
                 # determine minimum number of estimators with least overfitting
-                x = np.arange(max_gbr_iterations) + 1
-                test_score = heldout_score(clf, x_train, y_train,max_gbr_iterations)
-                test_score -= test_score[0]
-                test_best_iter = x[np.argmin(test_score)]
-                print test_best_iter, "optimum number of iterations"
-                gbr_parameter_grid_['n_estimators'] = [test_best_iter*3]
+
+                opt_gbr = np.arange(max_gbr_iterations) + 0
+                test_score = heldout_score(clf, x_train, y_train, max_gbr_iterations)
+                test_score /= test_score[0]
+                test_best_iter = opt_gbr[np.argmin(test_score)]
+                print test_best_iter
+
+                # triple the optimum number of estimators.
+                gbr_parameter_grid_['n_estimators'] = [test_best_iter]
 
                 # then implement grid search alg.
                 grid_searcher = grid_search.GridSearchCV(estimator=clf,
@@ -200,11 +206,9 @@ def main(
     feature_track.to_csv('feature_track.csv')
 
     # overall r2 value for all runs
-
     overall_r2 = metrics.r2_score(
         np.array(rfecv_y_predicted_track).ravel(order='C'), np.array(
             rfecv_y_holdout_track).ravel(order='C'))
-    print overall_r2
 
     # Output to plot the predicted y values 
     rfecv_y_predicted_track = pd.DataFrame(rfecv_y_predicted_track).transpose()
@@ -214,12 +218,10 @@ def main(
     rfecv_y_holdout_track = pd.DataFrame(rfecv_y_holdout_track).transpose()
     rfecv_y_holdout_track.to_csv('rfecv_y_holdout_track.csv')
 
-    # rfecv_x_holdout_track = pd.DataFrame(rfecv_x_holdout_track)
-    # rfecv_x_holdout_track.to_csv('rfecv_x_holdout_track.csv')
-
     # Output used to plot the optimum model MAE 
     score_track_mae = pd.DataFrame(score_track_mae).transpose()
     score_track_mae.to_csv('score_track_mae.csv')
+    print score_track_mae
 
     # Output used to plot the optimum model r2 
     score_track_r2 = pd.DataFrame(score_track_r2).transpose()
@@ -236,5 +238,4 @@ def main(
 
 
 if __name__=="__main__":
-    main(iterations=1, plot_rfecv_gridscore=False, plot_all_gridscores=True)
-
+    main(iterations=100, plot_rfecv_gridscore=False, plot_all_gridscores=True)
